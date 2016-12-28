@@ -1,0 +1,3 @@
+Manifest-Version: 1.0
+org.librepilot.cloud.Main-Class: org.librepilot.cloud.Main
+
