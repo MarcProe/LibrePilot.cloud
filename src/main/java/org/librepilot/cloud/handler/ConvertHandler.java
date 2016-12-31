@@ -5,9 +5,6 @@ import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import org.json.JSONTokener;
 import org.librepilot.cloud.H;
 import org.librepilot.cloud.Main;
 import org.librepilot.cloud.UAVSettingsConverter;
@@ -25,18 +22,13 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.*;
-import java.net.URL;
 import java.security.InvalidParameterException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.MessageFormat;
-import java.util.Arrays;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.zip.Deflater;
+import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
 
 /**
  * Created by marc on 22.08.2016.
@@ -48,10 +40,12 @@ public class ConvertHandler extends AbstractHandler {
     public ConvertHandler() {
         LOG.setDebugEnabled(true);
         LOG.debug("http://localhost:8080/convert startet!");
+
+
     }
 
     private void println(String s, PrintWriter out, boolean debug) {
-        if(debug) {
+        if (debug) {
             out.println(s);
         }
     }
@@ -76,7 +70,7 @@ public class ConvertHandler extends AbstractHandler {
 
         } catch (Exception e) {
             e.printStackTrace();
-            response.sendRedirect("/convert/?error=" + java.net.URLEncoder.encode(e.getClass().getSimpleName() + ": " + e.getMessage(), "utf-8") );
+            response.sendRedirect("/convert/?error=" + java.net.URLEncoder.encode(e.getClass().getSimpleName() + ": " + e.getMessage(), "utf-8"));
             baseRequest.setHandled(true);
             return;
         }
@@ -92,7 +86,7 @@ public class ConvertHandler extends AbstractHandler {
         boolean download = request.getParameter("download") != null && request.getParameter("download").equals("true");
         boolean debug = request.getParameter("debug") != null && request.getParameter("debug").equals("true");
 
-        if(debug && download) {
+        if (debug && download) {
             debug = false;
         }
 
@@ -100,20 +94,20 @@ public class ConvertHandler extends AbstractHandler {
         String filename1 = "";
         String filename2 = "";
 
-        if(!getFromSession) {
+        if (!getFromSession) {
 
             Part objFrom = request.getPart("objfrom");
             Part objTo = request.getPart("objto");
             Part settingsFile = request.getPart("settings");
 
 
-            String fromSourceName = objFrom.getSubmittedFileName();
-            String toSourceName = objTo.getSubmittedFileName();
+            String fromSourceName = "";//objFrom.getSubmittedFileName();
+            String toSourceName = "";//objTo.getSubmittedFileName();
 
             InputStream fromStream;
             InputStream toStream;
-            fromStream = objFrom.getInputStream();
-            toStream = objTo.getInputStream();
+            fromStream = null;//objFrom.getInputStream();
+            toStream = null;//objTo.getInputStream();
 
             if (settingsFile.getSize() == 0) {
                 throw new InvalidParameterException("No Settings");
@@ -123,99 +117,25 @@ public class ConvertHandler extends AbstractHandler {
             String tohash = request.getParameter("tohash");
 
 
-
             UAVSettingsConverter sc = new UAVSettingsConverter();
 
-            if (objFrom.getSize() == 0) {
+            if (objFrom == null) {
                 ByteArrayOutputStream outstr = new ByteArrayOutputStream();
-                if (fromhash == null || fromhash.equals("") || fromhash.equals("226f8c4c")) {
-                    fromhash = "226f8c4c";  //15.09
-                } else {
-                    URL url = new URL(MessageFormat.format("https://api.bitbucket.org/1.0/repositories/librepilot/librepilot/src/{0}/shared/uavobjectdefinition", fromhash));
-                    LOG.debug(url.toExternalForm());
-                    JSONTokener tokener = new JSONTokener(url.openStream());
-                    JSONObject root = new JSONObject(tokener);
-                    JSONArray files = ((JSONArray) root.get("files"));
-                    ZipOutputStream zip = new ZipOutputStream(outstr);
-                    zip.setLevel(Deflater.NO_COMPRESSION);
 
-                    for (Object o : files) {
-                        String path = (((JSONObject) o).get("path").toString());
-                        System.out.println(path);
-                        URL furl = new URL(MessageFormat.format("https://api.bitbucket.org/1.0/repositories/librepilot/librepilot/raw/{0}/{1}", fromhash, path));
-                        InputStream is = furl.openStream();
+                fromStream = Main.class.getClassLoader().getResourceAsStream("uavo/"+fromhash);
+                fromSourceName = "Buildin " + fromhash;
 
-                        zip.putNextEntry(new ZipEntry(furl.getFile().substring(furl.getFile().lastIndexOf('/') + 1)));
-
-                        int length;
-                        byte[] b = new byte[256];
-
-                        while ((length = is.read(b)) > 0) {
-                            zip.write(b, 0, length);
-                        }
-                        zip.closeEntry();
-                        is.close();
-
-                    }
-                    zip.close();
-
-                    ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(outstr.toByteArray()));
-                    //"uavo/15.09-85efdd63.zip"
-                }
-
-                if (fromhash.equals("226f8c4c")) {  //load a static 15.09 to reduce traffic on bitbucket
-                    fromStream = Main.class.getClassLoader().getResourceAsStream("uavo/15.09-85efdd63.zip");
-                    fromSourceName = "Buildin uavo/15.09-85efdd63.zip";
-                } else {
-                    fromStream = new ByteArrayInputStream(outstr.toByteArray());
-                    fromSourceName = MessageFormat.format("https://api.bitbucket.org/1.0/repositories/librepilot/librepilot/src/{0}/shared/uavobjectdefinition", fromhash);
-                }
             }
 
-            if (objTo.getSize() == 0) {
+            if (objTo == null) {
                 ByteArrayOutputStream outstr = new ByteArrayOutputStream();
-                if (tohash == null || tohash.equals("") || tohash.equals("a8f09d2")) {
-                    tohash = "a8f09d2";  //16.09 RC1
-                } else {
-                    URL url = new URL(MessageFormat.format("https://api.bitbucket.org/1.0/repositories/librepilot/librepilot/src/{0}/shared/uavobjectdefinition", tohash));
-                    LOG.debug(url.toExternalForm());
-                    JSONTokener tokener = new JSONTokener(url.openStream());
-                    JSONObject root = new JSONObject(tokener);
-                    JSONArray files = ((JSONArray) root.get("files"));
-                    ZipOutputStream zip = new ZipOutputStream(outstr);
-                    zip.setLevel(Deflater.NO_COMPRESSION);
 
-                    for (Object o : files) {
-                        String path = (((JSONObject) o).get("path").toString());
-                        System.out.println(path);
-                        URL furl = new URL(MessageFormat.format("https://api.bitbucket.org/1.0/repositories/librepilot/librepilot/raw/{0}/{1}", tohash, path));
-                        InputStream is = furl.openStream();
+                toStream = Main.class.getClassLoader().getResourceAsStream("uavo/"+tohash);
+                toSourceName = "Buildin " + tohash;
 
-                        zip.putNextEntry(new ZipEntry(furl.getFile().substring(furl.getFile().lastIndexOf('/') + 1)));
-
-                        int length;
-                        byte[] b = new byte[256];
-
-                        while ((length = is.read(b)) > 0) {
-                            zip.write(b, 0, length);
-                        }
-                        zip.closeEntry();
-                        is.close();
-
-                    }
-                    zip.close();
-
-                    ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(outstr.toByteArray()));
-                }
-
-                if (tohash.equals("a8f09d2")) {  //load a static 16.09 to reduce traffic on bitbucket
-                    toStream = Main.class.getClassLoader().getResourceAsStream("uavo/16.09-RC1-4962b01c.zip");
-                    toSourceName = "Buildin uavo/16.09-RC1-4962b01c.zip";
-                } else {
-                    toStream = new ByteArrayInputStream(outstr.toByteArray());
-                    toSourceName = MessageFormat.format("https://api.bitbucket.org/1.0/repositories/librepilot/librepilot/src/{0}/shared/uavobjectdefinition", tohash);
-                }
             }
+
+            System.out.println(fromhash + " " + tohash);
 
             sc.convert(fromStream, toStream, settingsFile.getInputStream());
 
@@ -245,11 +165,18 @@ public class ConvertHandler extends AbstractHandler {
             for (UAVSettingsObject o : settings.objects.values()) {
                 UAVTalkXMLObject xmlObjFrom = mapFrom.get(o.name);
                 UAVTalkXMLObject xmlObjTo = mapTo.get(o.name);
-                boolean objok = o.id.equals("0x" + xmlObjFrom.getId());
+//                boolean objok = o.id.equals("0x" + xmlObjFrom.getId());
                 String toId = xmlObjTo.getId();
-                String fromId = xmlObjFrom.getId();
+                String fromId;
+                String fromName;
+                if (xmlObjFrom != null) {
+                    fromId = xmlObjFrom.getId();
+                    fromName = xmlObjFrom.getName();
+                } else {
+                    System.out.println("BAD. BAAAAD!!!!" + o.name);
+                    continue;
+                }
                 String toName = xmlObjTo.getName();
-                String fromName = xmlObjFrom.getName();
                 String targetColor = "#880000";
                 if (toId.equals(o.id)) {
                     targetColor = "#008800";
@@ -266,6 +193,7 @@ public class ConvertHandler extends AbstractHandler {
                     }
                 }
                 for (UAVSettingsField f : o.fields.values()) {
+
                     UAVTalkXMLObject.UAVTalkXMLObjectField xmlFieldFrom = xmlObjFrom.getFields().get(f.name);
                     UAVTalkXMLObject.UAVTalkXMLObjectField xmlFieldTo = xmlObjTo.getFields().get(f.name);
 
@@ -294,6 +222,8 @@ public class ConvertHandler extends AbstractHandler {
                         if (values.length() > 0) {
                             values = values.substring(0, values.length() - 1);
                         }
+                    } else {
+                        values = f.values;
                     }
 
                     String corCol = "";
@@ -339,14 +269,14 @@ public class ConvertHandler extends AbstractHandler {
             println("</table>", out, debug);
 
             filename1 = settingsFile.getSubmittedFileName();
-            filename2= tohash;
+            filename2 = tohash;
             request.getSession().setAttribute("filename1", filename1);
             request.getSession().setAttribute("filename2", filename2);
 
         } else {
-            xml = (String)request.getSession().getAttribute("xml");
-            filename1 = (String)request.getSession().getAttribute("filename1");
-            filename2 = (String)request.getSession().getAttribute("filename2");
+            xml = (String) request.getSession().getAttribute("xml");
+            filename1 = (String) request.getSession().getAttribute("filename1");
+            filename2 = (String) request.getSession().getAttribute("filename2");
         }
 
         if (download) {
@@ -357,14 +287,14 @@ public class ConvertHandler extends AbstractHandler {
             response.setContentType("text/html");
         }
 
-        if(download) {
+        if (download) {
             out.println(xml);
         } else {
             request.getSession().setAttribute("xml", xml);
             xml = StringEscapeUtils.escapeHtml(xml);
             xml = xml.replaceAll("\r\n", "<br />").replaceAll("&lt;!--", "<i style=\"color:red\">&lt;!--").replaceAll("--&gt;", "--&gt;</i>").replaceAll("    ", "&nbsp;&nbsp;&nbsp;&nbsp;");
 
-            out.println("<form method='POST' action='"+request.getRequestURL()+"'>" +
+            out.println("<form method='POST' action='" + request.getRequestURL() + "'>" +
                     "<input type='submit' name='click' value='Download' />" +
                     "<input type='hidden' name='download' value='true' />" +
                     "<input type='hidden' name='getfromsession' value='true' />" +
@@ -456,25 +386,89 @@ public class ConvertHandler extends AbstractHandler {
         out.println("<h1><img src=\"https://forum.librepilot.org/librepilot_logo_forum.png\" /> <br />Settings conversion service</h1>");
         out.println("<h2>ALPHA / WORK IN PROGRESS</h2>");
         String error = request.getParameter("error");
-        if(error != null && !error.equals("")) {
-            out.println("<p class=\"flow-text\"><b style=\"color:red\">"+error+"</b></p>");
+        if (error != null && !error.equals("")) {
+            out.println("<p class=\"flow-text\"><b style=\"color:red\">" + error + "</b></p>");
         }
-        out.println("<form method='post' action='/convert/'  enctype='multipart/form-data'>");
-        out.println("<p class=\"flow-text\" style=\"background-color:#eeeeff;margin:15px;\"><label class=\"flow-text\" for=\"objfrom\">Zipfile with current objects (<a href='https://bintray.com/marcproe/LP2Go-UAVO/download_file?file_path=zip%2F15.09-85efdd63.zip'>for example: 15.09</a>):</label> <input type='file' name='objfrom'' size='60' /><br />" +
-                "<label class=\"flow-text\" for=\"fromhash\">or enter a commit hash to fetch that commit from bitbucket (takes +~20 seconds): </label><input type=\"text\" id= \"fromhash\" name=\"fromhash\" />"+
-                "or leave emtpy to load 15.09 from a server-side archive<br /></p>");
-        out.println("<p class=\"flow-text\" style=\"background-color:#eeeeff;margin:15px;\"><label class=\"flow-text\" for=\"objto\">Zipfile with target objects (<a href='https://bintray.com/package/files/marcproe/LP2Go-UAVO/uavo'>for example: next</a>):</label> <input type='file' name='objto' size='60' /><br />"+
-                "<label class=\"flow-text\" for=\"tohash\">or enter a commit hash to fetch that commit from bitbucket (takes +~20 seconds): </label><input type=\"text\" id= \"tohash\" name=\"tohash\" />" +
-                "or leave emtpy to load 16.09 RC1 from a server-side archive<br /></p>");
-        out.println("<p style=\"background-color:#eeeeff;margin:15px;\" class=\"flow-text\">.uav settings file: <input type='file' name='settings' size='60' /></p>");
-        out.println("<!--<p class=\"flow-text\"><input type=\"checkbox\" value=\"true\" name=\"download\" id=\"download\" /><label class=\"flow-text\" for=\"download\">Don't show, download as file </label></p>-->");
-        out.println("<!--<p class=\"flow-text\"><input type=\"checkbox\" value=\"true\" name=\"debug\" id=\"debug\" /><label class=\"flow-text\" for=\"debug\">Show Debug </label></p>-->");
-        out.println("<p class=\"flow-text\" style=\"margin:15px;\"><input type='submit' value='Upload' /></p>");
+        out.println("<form method='post' action='/convert/' enctype='multipart/form-data'>");
+        out.println("<p class=\"flow-text\" style=\"background-color:#eeeeff;margin:15px;\">");
+        out.println("<div class=\"input-field col s12 flow-text\">\n" +
+                "    <select id=\"fromhash\" name=\"fromhash\">\n");
+        try {
+            List<String> l = getResourceFiles("uavo/");
+            for (String str : l) {
+                out.println("<option value=\"" + str + "\">" + str + "</option>\n");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        out.println("    </select>\n" +
+                "    <label class=\"flow-text\">Choose which version to convert from:</label>\n" +
+                "  </div><br /></p>");
+        out.println("<p class=\"flow-text\" style=\"background-color:#eeeeff;margin:15px;\">" +
+         "<div class=\"input-field col s12 flow-text\">\n" +
+                "    <select id= \"tohash\" name=\"tohash\">\n");
+        try {
+            List<String> l = getResourceFiles("uavo/");
+            for (String str : l) {
+                out.println("<option value=\"" + str + "\">" + str + "</option>\n");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        out.println("    </select>\n" +
+                "    <label>Choose which version to convert to:</label>\n" +
+                "  </div><br /></p>");
+
+        out.println("<p style=\"background-color:#eeeeff;margin:15px;\" class=\"flow-text\">.uav settings file: " +
+                "<input type='file' name='settings' size='60' /></p>" +
+                "");
+        out.println("<p class=\"flow-text\"><input type=\"checkbox\" value=\"true\" name=\"debug\" id=\"debug\" />" +
+                "<label class=\"flow-text\" for=\"debug\">Show Debug </label></p>");
+        out.println("<p class=\"flow-text\" style=\"margin:15px;\">" +
+                "" +
+                "" +
+                "<input type='submit' value='Upload' />" +
+                "" +
+                "" +
+                "</p>");
         out.println("</form>");
 
         out.println("<script type=\"text/javascript\" src=\"https://code.jquery.com/jquery-2.1.1.min.js\"></script>\n" +
                 "      <script src=\"https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.7/js/materialize.min.js\"></script>\n" +
+                "<script type=\"text/javascript\">$(document).ready(function() {\n" +
+                "    $('select').material_select();\n" +
+                "  });</script>" +
                 "    </body>\n" +
                 "  </html>");
     }
+
+    private List<String> getResourceFiles(String path) throws IOException {
+        List<String> filenames = new ArrayList<>();
+
+        try (
+                InputStream in = getResourceAsStream(path);
+                BufferedReader br = new BufferedReader(new InputStreamReader(in))) {
+            String resource;
+
+            while ((resource = br.readLine()) != null) {
+                filenames.add(resource);
+            }
+        }
+
+        return filenames;
+    }
+
+    private InputStream getResourceAsStream(String resource) {
+        final InputStream in
+                = getContextClassLoader().getResourceAsStream(resource);
+
+        return in == null ? getClass().getResourceAsStream(resource) : in;
+    }
+
+    private ClassLoader getContextClassLoader() {
+        return Thread.currentThread().getContextClassLoader();
+    }
+
 }
